@@ -8,8 +8,8 @@ using UnityEngine;
 
 public class DBManager : MonoBehaviour
 {
-    public string playerName;
-    public int playerId;
+    public string playerPassword;
+    public string playerLogin;
 
     private readonly string _connectionString =
         "Host=localhost;Port=5432;Username=postgres;Password=Bobik123654;Database=postgres";
@@ -35,7 +35,7 @@ public class DBManager : MonoBehaviour
             while (dr.Read())
             {
                 var carModifications = JsonConvert.DeserializeObject<List<JsonFormat>>(dr.GetString(2)); // берется стобец json с модификациями машины
-                if (dr.GetInt32(0) == playerId)
+                if (dr.GetString(0) == playerLogin)
                     for (int j = 0; j < carModifications.Count; j++)
                     {
                         for (int i = 0; i < details.Count; i++)
@@ -88,29 +88,58 @@ public class DBManager : MonoBehaviour
 
             NpgsqlCommand cmd;
 
-            if (CheckPlayerIdExisting(playerId))
+            if (CheckPlayerLoginExisting(playerLogin))
             {
                 string updatePlayerModifications =
-                    $"UPDATE players SET name = '{playerName}', player_modifications = '{playerModifications}' WHERE player_id = {playerId}";
+                    $"UPDATE players SET player_login = '{playerLogin}', player_modifications = '{playerModifications}' WHERE player_login = '{playerLogin}'";
                 cmd = new NpgsqlCommand(updatePlayerModifications, conn);
             }
             else
             {
                 string savePlayerModifications =
-                    $"INSERT INTO players VALUES ({playerId}, '{playerName}', '{playerModifications}');";
+                    $"INSERT INTO players VALUES ('{playerLogin}', '{playerPassword}', '{playerModifications}');";
                 cmd = new NpgsqlCommand(savePlayerModifications, conn);
             }
             cmd.ExecuteNonQuery();
         }
     }
 
-    public bool CheckPlayerIdExisting(int _playerId)
+    public bool CheckPlayerLoginExisting(string _playerLogin)
     {
         using (NpgsqlConnection conn = new NpgsqlConnection(_connectionString))
         {
             conn.Open();
             string checkPlayerId =
-                $"SELECT EXISTS (SELECT * FROM players WHERE player_id = {_playerId})";
+                $"SELECT EXISTS (SELECT * FROM players WHERE player_login = '{_playerLogin}')";
+            NpgsqlCommand cmd =
+                new NpgsqlCommand(checkPlayerId, conn);
+            NpgsqlDataReader dr = cmd.ExecuteReader();
+            while (dr.Read())
+            {
+                return dr.GetBoolean(0);
+            }
+            return false;
+        }
+    }
+
+    public void Registrartion(string _playerLogin, string _playerPassword)
+    {
+        using (NpgsqlConnection conn = new NpgsqlConnection(_connectionString))
+        {
+            conn.Open();
+            string reg = $"INSERT INTO players VALUES('{_playerLogin}', '{_playerPassword}', 'null')";
+            NpgsqlCommand cmd = new NpgsqlCommand(reg, conn);
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    public bool CheckPlayerExisting(string _playerLogin, string _playerPassword)
+    {
+        using (NpgsqlConnection conn = new NpgsqlConnection(_connectionString))
+        {
+            conn.Open();
+            string checkPlayerId =
+                $"SELECT EXISTS (SELECT * FROM players WHERE player_password = '{_playerPassword}' AND player_login = '{_playerLogin}')";
             NpgsqlCommand cmd =
                 new NpgsqlCommand(checkPlayerId, conn);
             NpgsqlDataReader dr = cmd.ExecuteReader();

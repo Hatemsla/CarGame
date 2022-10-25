@@ -67,7 +67,7 @@ public class CarController : MonoBehaviourPun
         _dbManager.details = gameObject.GetComponentsInChildren<Detail>().ToList();
 
         _raceManager = FindObjectOfType<RaceManager>();
-        _raceManager.players.Add(this);
+        _raceManager.players.Add(GetComponent<CarController>());
 
         _rb.centerOfMass = COM;
 
@@ -82,7 +82,7 @@ public class CarController : MonoBehaviourPun
         if (photonView.IsMine)
         {
             _raceManager.carObjects.Add(gameObject.GetComponent<CheckNode>()); // добавление игрока в список игроков
-            // _dbManager.LoadModifications();
+            //_dbManager.LoadModifications();
 
             for (int i = 0; i < _dbManager.details.Count; i++) // применнеи цветов игрока без БД
             {
@@ -93,11 +93,10 @@ public class CarController : MonoBehaviourPun
                         float.Parse(colors[2]));
                 _dbManager.details[i].gameObject.GetComponent<Renderer>().material.
                         SetFloat("_Glossiness", float.Parse(colors[3]));
-            }
 
-            for (int i = 0; i < _dbManager.details.Count; i++)
-            {
-                var color = _dbManager.details[i].GetComponent<Renderer>().material.color;
+                var color = new Color(float.Parse(colors[0]),
+                        float.Parse(colors[1]),
+                        float.Parse(colors[2]));
                 photonView.RPC(nameof(SetColor), RpcTarget.AllBuffered, color.r, color.g, color.b, i); // установка цветов деталей игрока и их синхронизация с другими игроками
             }
 

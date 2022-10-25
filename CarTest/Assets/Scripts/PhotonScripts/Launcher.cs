@@ -5,6 +5,7 @@ using Photon.Pun;
 using Photon.Realtime;
 using UnityEngine.UI;
 using Hashtable = ExitGames.Client.Photon.Hashtable;
+using System;
 
 public class Launcher : MonoBehaviourPunCallbacks
 {
@@ -13,21 +14,31 @@ public class Launcher : MonoBehaviourPunCallbacks
 
     [SerializeField] private RoomTimer _roomTimer;
     [SerializeField] private InputField _roomInputField;
+    [SerializeField] private InputField _authLoginInputField;
+    [SerializeField] private InputField _authPasswordInputField;
+    [SerializeField] private InputField _regLoginInputField;
+    [SerializeField] private InputField _regPasswordInputField;
     [SerializeField] private Text _roomNameText;
     [SerializeField] private Text _currentPlayersCountText;
+    [SerializeField] private GameObject _loginAlert;
+    [SerializeField] private GameObject _regAlert;
     [SerializeField] private Transform _roomList;
     [SerializeField] private GameObject _roomButtonPrefab;
     [SerializeField] private Transform _playerList;
     [SerializeField] private GameObject _playerNamePrefab;
     [SerializeField] private GameObject _startGameButton;
-    private DBManager _dbManager;
-    private Color _startGameButtonColor;
-    private bool _isNotLeave = true;
 
-    void Start()
+    private DBManager _dbManager;
+    private int _minPlayersCount = 2;
+    private bool _isNotLoad = true;
+    private bool _isNotLeave = true;
+    private bool _isInAcc;
+    private bool _isNotRoomReady = true;
+    private bool _isChangeButtonColor;
+
+    private void Start()
     {
         _dbManager = FindObjectOfType<DBManager>();
-        _startGameButtonColor = _startGameButton.GetComponent<Image>().material.color;
 
         instance = this;
         PhotonNetwork.ConnectUsingSettings();
@@ -39,29 +50,67 @@ public class Launcher : MonoBehaviourPunCallbacks
     {
         _currentPlayersCountText.text = PhotonNetwork.PlayerList.Length.ToString();
 
+
         if (PhotonNetwork.IsMasterClient && PhotonNetwork.IsConnectedAndReady)
         {
-            if (PhotonNetwork.PlayerList.Length >= 1)
+            if (PhotonNetwork.PlayerList.Length == 3) //комната не загружается сама
             {
-                _startGameButton.GetComponent<Button>().enabled = true;
-                _startGameButtonColor = new Color(1f, 1f, 1f);
+                if (_isNotLoad)
+                {
+                    _isNotLeave = false;
+                    PhotonNetwork.LoadLevel(1);
+                }
             }
-            else
+            else if (_roomTimer.timeRemaining <= 0 && PhotonNetwork.PlayerList.Length >= _minPlayersCount)
             {
-                _startGameButton.GetComponent<Button>().enabled = false;
-                _startGameButtonColor = new Color(0.7f, 0.7f, 0.7f);
+                if (_isNotLoad)
+                {
+                    _isNotLeave = false;
+                    PhotonNetwork.LoadLevel(1);
+                }
+            }
+            else if (_isNotLeave && _roomTimer.timeRemaining <= 0 && PhotonNetwork.PlayerList.Length < _minPlayersCount)
+            {
+                LeaveRoom();
+                _isNotLeave = !_isNotLeave;
             }
 
             Hashtable ht = PhotonNetwork.CurrentRoom.CustomProperties;
-            ht.Remove("timer");
-            ht.Add("timer", _roomTimer.timeRemaining);
-            PhotonNetwork.CurrentRoom.SetCustomProperties(ht);
+            ht["timer"] = _roomTimer.timeRemaining;
+            PhotonNetwork.LocalPlayer.SetCustomProperties(ht);
         }
+    }
 
-        if (_roomTimer.timeRemaining <= 110 && _isNotLeave)
+    public void Login()
+    {
+        if (_dbManager.CheckPlayerExisting(_authLoginInputField.text, _authPasswordInputField.text))
         {
-            LeaveRoom();
-            _isNotLeave = !_isNotLeave;
+            _dbManager.playerLogin = _authLoginInputField.text;
+            _dbManager.playerPassword = _authPasswordInputField.text;
+            _isInAcc = true;
+            PhotonNetwork.NickName = _dbManager.playerLogin;
+            MenuManager.instance.OpenMenu("Title");
+        }
+        else
+        {
+            _loginAlert.SetActive(true);
+        }
+    }
+
+    public void Registration()
+    {
+        if (!_dbManager.CheckPlayerExisting(_regLoginInputField.text, _regPasswordInputField.text))
+        {
+            _dbManager.Registrartion(_regLoginInputField.text, _regPasswordInputField.text);
+            _dbManager.playerLogin = _regLoginInputField.text;
+            _dbManager.playerPassword = _regPasswordInputField.text;
+            _isInAcc = true;
+            PhotonNetwork.NickName = _dbManager.playerLogin;
+            MenuManager.instance.OpenMenu("Title");
+        }
+        else
+        {
+            _regAlert.SetActive(true);
         }
     }
 
@@ -73,10 +122,12 @@ public class Launcher : MonoBehaviourPunCallbacks
 
     public override void OnJoinedLobby()
     {
-        MenuManager.instance.OpenMenu("Title");
-        PhotonNetwork.NickName = "Player " + Random.Range(0, 1000);
-        _dbManager.playerName = PhotonNetwork.NickName;
-        _dbManager.playerId = int.Parse(_dbManager.playerName.Substring(7));
+        if (_isInAcc)
+            MenuManager.instance.OpenMenu("Title");
+        else
+            MenuManager.instance.OpenMenu("Auth");
+
+        PhotonNetwork.NickName = _dbManager.playerLogin;
     }
 
     public void CreateRoom()
@@ -112,11 +163,18 @@ public class Launcher : MonoBehaviourPunCallbacks
         {
             Hashtable ht = new Hashtable();
             ht.Add("timer", _roomTimer.timeRemaining);
-            PhotonNetwork.CurrentRoom.SetCustomProperties(ht);
+            PhotonNetwork.LocalPlayer.SetCustomProperties(ht);
         }
         else
         {
-            _roomTimer.timeRemaining = float.Parse(PhotonNetwork.CurrentRoom.CustomProperties["timer"].ToString());
+            //_roomTimer.timeRemaining = float.Parse(PhotonNetwork.CurrentRoom.CustomProperties["timer"].ToString());
+            foreach (var player in PhotonNetwork.PlayerList)
+            {
+                if (player.IsMasterClient)
+                {
+                    _roomTimer.timeRemaining = Convert.ToSingle(player.CustomProperties["timer"]);
+                }
+            }
         }
 
         _startGameButton.SetActive(PhotonNetwork.IsMasterClient);
@@ -163,9 +221,6 @@ public class Launcher : MonoBehaviourPunCallbacks
     public override void OnPlayerEnteredRoom(Player newPlayer)
     {
         Instantiate(_playerNamePrefab, _playerList).GetComponent<PlayerListItem>().SetUp(newPlayer);
-        Debug.Log($"The {newPlayer.NickName} is connected");
-
-        remainingTimeText.text = PhotonNetwork.CurrentRoom.CustomProperties["timer"].ToString();
     }
 
     public void StartGame()
